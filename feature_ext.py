@@ -28,10 +28,8 @@ import re
 import time
 import nibabel as nib
 import numpy as np
-import matplotlib.pyplot as plt
 import multiprocessing as mul
 import functools 
-from sklearn.cross_validation import ShuffleSplit
 
 def main():
     #data reposition and mask constraint
@@ -65,9 +63,10 @@ def main():
     mask_index = np.transpose(mask_f.nonzero())
     print mask_index.shape
     '''
-    ri = roi_mask
-    ri._data = mask_img
-    nib.save(ri,'final_mask.nii.gz')
+
+    final_mask = roi_mask
+    final_mask._data = mask_img
+    nib.save(final_mask,'final_mask.nii.gz')
 
     #output the mask coordinate indexs
     writeout(mask_index)
@@ -76,18 +75,6 @@ def main():
     subject_num = len(sess_list)
     sample_num = len(mask_index) # per subject
     
-    #random split the train set and test set.
-    ss = ShuffleSplit(subject_num, n_iter=1, test_size=0.206,random_state=10)
-    for train,test in ss:
-        #print("%s \n %s" % (train, test))
-        train_list,test_list = sess_list[train],sess_list[test]
-    print "train session",train_list,len(train_list)
-    print "test session",test_list,len(test_list)
-    train_subjects = "./train_split.sess"
-    test_subjects = "./test_split.sess"
-    output_sess_list(train_subjects,train_list)
-    output_sess_list(test_subjects,test_list)
-
     #get neighbor offset 1,2,3 radiud cubois.
     of_1 = get_neighbor_offset(1)
     of_2 = get_neighbor_offset(2)
@@ -111,20 +98,14 @@ def main():
     #save the every subject sample per file named sample_sid.txt
     
     pool = mul.Pool(30)
-    train_r = pool.map(functools.partial(ext,database=database,mask_index=mask_index,
-        of_1=of_1,of_2=of_2,of_3=of_3,flag="train"), train_list)
-    print train_r
-
-    #feature extraction on test set.
-    pool = mul.Pool(30)
-    test_r = pool.map(functools.partial(ext,database=database,mask_index=mask_index,
-        of_1=of_1,of_2=of_2,of_3=of_3,flag="test"), test_list)
-    print test_r
+    result = pool.map(functools.partial(ext,database=database,mask_index=mask_index,
+        of_1=of_1,of_2=of_2,of_3=of_3), sess_list)
+    print result
 
     print "Feature extraction total time:%s"%(time.time()-st)
     return
 
-def ext(sub=None,database=None,mask_index=None,of_1=None,of_2=None,of_3=None,cn=None,flag=None):
+def ext(sub=None,database=None,mask_index=None,of_1=None,of_2=None,of_3=None):
     """
     Wrapper function.
     Tested
@@ -141,7 +122,6 @@ def ext(sub=None,database=None,mask_index=None,of_1=None,of_2=None,of_3=None,cn=
         if re.search('_ff.nii.gz',file): 
             y_img =  os.path.join(sub_ct_dir,file)
             print y_img
-    cn=cn
     #initial the feature array.
     #3+3+3+3+30+30+20+1=93
     feat_buff = np.zeros((len(mask_index),93))
@@ -150,10 +130,7 @@ def ext(sub=None,database=None,mask_index=None,of_1=None,of_2=None,of_3=None,cn=
     #mask = samples[:,92]!=0
     #print samples[mask,92]
     #output samples as a file
-    if flag == "train":
-        np.savetxt('repo/train/sample_%s'%sub,samples,fmt='%10.5f',delimiter='    ',newline='\n')
-    else:
-        np.savetxt('repo/test/sample_%s'%sub,samples,fmt='%10.5f',delimiter='    ',newline='\n')
+    np.savetxt('sample_repo/sample_%s'%sub,samples,fmt='%10.5f',delimiter='    ',newline='\n')
     return 'Done'
 
 def writeout(mask_index):
